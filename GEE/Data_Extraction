@@ -1,0 +1,311 @@
+var S1 = ee.ImageCollection("COPERNICUS/S1_GRD"),
+    S2 = ee.ImageCollection("COPERNICUS/S2_SR"),
+    Area = ee.FeatureCollection("users/valeriofrank/Small_ponds/Area"), //Example
+    pts = ee.FeatureCollection("users/valeriofrank/Small_ponds/Polygons_WM_Geral_UTM_Ex"); //Example
+
+  var roi = Area;
+  var points = pts;
+
+  // Create the highest quality Sentinel-1 composites.
+  var sentinel1_IC = ee.ImageCollection(S1).filterDate('2017-05-01','2021-10-01').filterBounds(roi)
+  .map(function(img){return img.clip(roi)});
+  
+  //Defining the data aggregation approach for Sentinel-1
+  var interval = 7;
+  var increment = 'day';
+  var start = '2017-05-01';
+  // make a list of start years
+  var startDate = ee.Date(start);
+  var secondDate = startDate.advance(interval, increment).millis();
+  var increase = secondDate.subtract(startDate.millis());
+  var list = ee.List.sequence(startDate.millis(), ee.Date('2021-10-01').millis(), increase);
+  // weekly composite
+  var sentinel1_IC =  ee.ImageCollection.fromImages(list.map(function(date){
+  return sentinel1_IC.filterDate(ee.Date(date), ee.Date(date).advance(interval, increment))
+           .mean().set('system:time_start',ee.Date(date).millis());
+  }));
+
+  print('Sentinel_1',sentinel1_IC);
+  
+  
+  // Renaming spectral bands and quality bands for Sentinel-2
+  var bands = ['B2','B3','B4','B5','B6','B7','B8','B8A','B11','B12','QA60','SCL'];
+  var band_names = ['BLUE','GREEN','RED','Red_Edge_1','Red_Edge_2','Red_Edge_3','NIR1','NIR2','SWIR1','SWIR2', 'pixel_qa','pixel_flag'];
+  
+  // Function that help to extract the QA bits.
+  var getQABits = function(image, start, end, newName) {
+  // Computing the bits we need to extract.
+  var pattern = 0;
+  for (var i = start; i <= end; i++) {
+  pattern += Math.pow(2, i);
+  }
+  
+  // Returning a single band image of the extracted QA bits, giving the band a new name.
+  return image.select([0], [newName])
+  .bitwiseAnd(pattern)
+  .rightShift(start);
+  };
+  
+  // Function to retain pixels without opaque clouds
+  var maskClouds = function(image) {
+  // Identifying the quality band.
+  var QA_Clouds = image.select('pixel_qa');
+  var BitClouds = getQABits(QA_Clouds, 10, 10, 'Opaque clouds').expression("b(0) == 0");
+  image = image.addBands(BitClouds);
+  // Excluding opaque clouds
+  return image.updateMask(BitClouds.neq(0));
+  };
+  
+  // Function to retain pixels without cirrus clouds
+  var maskCirrus = function(image) {
+  // Identifying the quality band.
+  var QA_Cirrus = image.select('pixel_qa');
+  var BitCirrus = getQABits(QA_Cirrus, 11, 11, 'Cirrus Clouds').expression("b(0) == 0");
+  image = image.addBands(BitCirrus);
+  // Excluding cirrus
+  return image.updateMask(BitCirrus.neq(0));
+  };
+  
+  // Function to exclude pixels with anomalies
+  var maskNoanomalies = function(image){
+  // Identifying the quality band
+  var scl = image.select('pixel_flag');
+  // Excluding pixels that are Saturated or defective, dark area pixels, cloud shadows,
+  // clouds with low/medium and high probability, cirrus, snow and ice
+  var clear_pixels = scl.eq(2).or(scl.eq(4)).or(scl.eq(5)).or(scl.eq(6)).or(scl.eq(7)).or(scl.eq(8));
+  return image.updateMask(clear_pixels);
+  };
+    
+  
+ //Defining the data aggregation approach for Sentinel-2
+  
+    var sentinel2_IC = ee.ImageCollection(S2).filterDate('2017-05-01','2021-10-01')
+  .select(bands, band_names).filterBounds(roi).map(maskClouds).map(maskCirrus).map(maskNoanomalies)
+  .map(function(img){return img.clip(roi)});
+
+  var interval = 7;
+  var increment = 'day';
+  var start = '2017-05-01';
+  // make a list of start years
+  var startDate = ee.Date(start);
+  var secondDate = startDate.advance(interval, increment).millis();
+  var increase = secondDate.subtract(startDate.millis());
+  var list = ee.List.sequence(startDate.millis(), ee.Date('2021-10-01').millis(), increase);
+  // weekly composite
+  var sentinel2_IC =  ee.ImageCollection.fromImages(list.map(function(date){
+  return sentinel2_IC.filterDate(ee.Date(date), ee.Date(date).advance(interval, increment))
+           .mean().set('system:time_start',ee.Date(date).millis());
+  }));
+
+  print(sentinel2_IC);
+  
+  // Data fusion
+  var sentinel1_ICsentinel2_IC = ee.ImageCollection(sentinel1_IC.combine(sentinel2_IC));
+  
+  //Calculate Metrics for Sentinel1&2
+  var compute_indices = function(image) {
+  var NDVI_nir1 = image.expression(
+  '(NIR1 - RED)/(NIR1 + RED)', {
+  'NIR1': image.select('NIR1'),
+  'RED': image.select('RED')
+  }).rename('NDVI_NIR1');
+  
+  var NDVI_nir2 = image.expression(
+  '(NIR2-RED)/(NIR2+RED)', {
+  'NIR2': image.select('NIR2'),
+  'RED': image.select('RED')
+  }).rename('NDVI_NIR2');
+
+  var NDI45 = image.expression(
+  '(Red_Edge_1 - RED)/(Red_Edge_1 + RED)', {
+  'Red_Edge_1': image.select('Red_Edge_1'),
+  'RED': image.select('RED')
+  }).rename('NDI45');
+  
+  var MSAVI2_nir1 = image.expression(
+  '(2 * NIR1 + 1 - sqrt(pow((2 * NIR1 + 1), 2) - 8 * (NIR1 - RED)) ) / 2', {
+  'NIR1': image.select('NIR1'),
+  'RED': image.select('RED'),
+  }).rename('MSAVI2_NIR1');
+  
+  var MSAVI2_nir2 = image.expression(
+  '(2 * NIR2 + 1 - sqrt(pow((2 * NIR2 + 1), 2) - 8 * (NIR2 - RED)) ) / 2', {
+  'NIR2': image.select('NIR2'),
+  'RED': image.select('RED')
+  }).rename('MSAVI2_NIR2');
+
+  var NDII_nir1 = image.expression(
+  '(NIR1 - SWIR1)/(NIR1 + SWIR1)', {
+  'NIR1': image.select('NIR1'),
+  'SWIR1': image.select('SWIR1')
+  }).rename('NDII_NIR1');
+  
+  var NDII_nir2 = image.expression(
+  '(NIR2 - SWIR1)/(NIR2 + SWIR1)', {
+  'NIR2': image.select('NIR2'),
+  'SWIR1': image.select('SWIR1')
+  }).rename('NDII_NIR2');
+  
+  
+  var NDWI_nir1 = image.expression(
+  '(NIR1 - SWIR2)/(NIR1 + SWIR2)', {
+  'NIR1': image.select('NIR1'),
+  'SWIR2': image.select('SWIR2')
+  }).rename('NDWI_NIR1');
+  
+  var NDWI_nir2 = image.expression(
+  '(NIR2 - SWIR2)/(NIR2 + SWIR2)', {
+  'NIR2': image.select('NIR2'),
+  'SWIR2': image.select('SWIR2')
+  }).rename('NDWI_NIR2');
+  
+  var SWI = image.expression(
+  '(Red_Edge_1 - SWIR1)/(Red_Edge_1 + SWIR1)', {
+  'Red_Edge_1': image.select('Red_Edge_1'),
+  'SWIR1': image.select('SWIR1')
+  }).rename('SWI');
+
+  var VHVVR = image.expression(
+  '(VH)/(VV)', {
+  'VH': image.select('VH'),
+  'VV': image.select('VV')
+  }).rename('VHVVR');
+  
+  var NDPI = image.expression(
+  '(VV - VH)/(VV + VH)', {
+  'VH': image.select('VH'),
+  'VV': image.select('VV')
+  }).rename('NDPI');
+  
+  var RVI = image.expression(
+  '4 * VH/(VV + VH)', {
+  'VH': image.select('VH'),
+  'VV': image.select('VV')
+  }).rename('RVI');
+  
+  var NVHI = image.expression(
+  'VH/(VV+VH)', {
+  'VH': image.select('VH'),
+  'VV': image.select('VV')
+  }).rename('NVHI');
+  
+  var NVVI = image.expression(
+  'VV/(VV + VH)', {
+  'VH': image.select('VH'),
+  'VV': image.select('VV')
+  }).rename('NVVI');
+
+  return image.addBands(NDVI_nir1).addBands(NDVI_nir2).addBands(NDI45).addBands(MSAVI2_nir1).addBands(MSAVI2_nir2)
+  .addBands(NDII_nir1).addBands(NDII_nir2).addBands(NDWI_nir1).addBands(NDWI_nir2).addBands(SWI)
+  .addBands(VHVVR).addBands(NDPI).addBands(RVI).addBands(NVHI).addBands(NVVI);
+  };
+ 
+
+  // Compute the indices
+  var sentinel1_ICsentinel2_IC = sentinel1_ICsentinel2_IC.map(compute_indices);
+  print (sentinel1_ICsentinel2_IC);
+
+  // Selecting the NDVI index for co-occurrence analysis.
+  var NDVI_nir1 = ['NDVI_NIR1'];
+  var NDVI_nir1 = sentinel1_ICsentinel2_IC.select(NDVI_nir1);
+  
+  // Calculating the gray-level co-occurrence matrix (GLCM) for each aggregated imagery.
+  var NDVI_GLCM16bit = NDVI_nir1
+  .map (function (image) {
+  var glcm = image.multiply(512).uint8().glcmTexture(3, ee.Kernel.circle(3,'pixels', true)).float().divide(512);
+  return image.addBands(glcm);
+  });
+  
+  //Integrating the calculated metrics within the composite dataset
+  var SpectralIndices = ee.ImageCollection(NDVI_GLCM16bit.combine(sentinel1_ICsentinel2_IC));
+  var SpectralIndices = SpectralIndices.copyProperties(sentinel1_ICsentinel2_IC, sentinel1_ICsentinel2_IC.propertyNames());
+  var SpectralIndices = ee.ImageCollection(SpectralIndices).select(['NDVI_NIR1_savg', 'NDVI_NIR1_contrast', 
+  'NDVI_NIR1_var', 'NDVI_NIR1_ent','VV','VH','BLUE','GREEN','RED','Red_Edge_1','Red_Edge_2','Red_Edge_3','NIR1','NIR2',
+  'SWIR1','SWIR2','NDVI_NIR1','NDVI_NIR2','NDI45','MSAVI2_NIR1','MSAVI2_NIR2','NDII_NIR1','NDII_NIR2','NDWI_NIR1',
+  'NDWI_NIR2','SWI','VHVVR','NDPI','RVI','NVHI','NVVI']);
+  print('Second check of image collection - Metrics:', SpectralIndices);
+  
+  // Renaming the variables
+  var varbands = ['NDVI_NIR1_savg', 'NDVI_NIR1_contrast', 'NDVI_NIR1_var', 'NDVI_NIR1_ent','VV','VH','BLUE','GREEN','RED',
+  'Red_Edge_1','Red_Edge_2','Red_Edge_3','NIR1','NIR2','SWIR1','SWIR2','NDVI_NIR1','NDVI_NIR2','NDI45','MSAVI2_NIR1',
+  'MSAVI2_NIR2','NDII_NIR1','NDII_NIR2','NDWI_NIR1','NDWI_NIR2','SWI','VHVVR','NDPI','RVI','NVHI','NVVI'];
+  
+  var varband_names = ['GLCM_M', 'GLCM_C', 'GLCM_V', 'GLCM_H','VV','VH','BLUE','GREEN','RED','Red_Edge_1','Red_Edge_2',
+  'Red_Edge_3','NIR1','NIR2','SWIR1','SWIR2','NDVI_N1','NDVI_N2','NDI45','MSAVI2_N1','MSAVI2_N2','NDII_N1',
+  'NDII_N2','NDWI_N1','NDWI_N2','SWI','VHVVR','NDPI','RVI','NVHI','NVVI'];
+  var SpectralIndices = SpectralIndices.select(varbands, varband_names);
+  print('Second check of image collection - Metrics:', SpectralIndices);
+  
+  //Extract the data.
+  // The SpatialPointsDataframe is used to filter the image collection.
+  // The filtering process is based on the temporal interval of the timestamp of the SpatialPointsDataframe (or polygon).
+  
+  var ExtractedPoints = points.map(function(feature){
+  
+  // Calling the date for each SpatialPointsDataframe feature.
+  var date = ee.Number(feature.get('timestamp2'));
+  
+  // Converting the temporal data in a legible format (e.g., YYYY/MM/dd). 
+  // (https://developers.google.com/earth-engine/apidocs/ee-date-parse)
+  date = ee.Date.parse('YYYY/MM/dd', date);
+  
+  // Determining the size of sub-temporal windows for searching the multispectral imageries.
+  var startTempWind = date.advance(-7,'days');
+  var endTempWind = date.advance(7,'days');
+  
+  // Applying the sub-temporal windows and getting the closest temporal information between 
+  // telemetry data and multispectral imageries.
+  var FiltTempWind = SpectralIndices.filterDate(startTempWind, endTempWind).mean();
+  
+  // Extracting the remotely sensed information using the SpatialPointsDataframe feature.                    
+  var data = FiltTempWind.reduceRegion(ee.Reducer.first(), feature.geometry(), 10);
+
+  return ee.Feature(feature.setMulti(data));
+  });
+  
+  //Return a SpatialPointsDataframe with remotely sensed information.
+  // Calling the original SpatialPointsDataframe.
+  var OriginalSpatialPointsDataframe = points;
+  
+  // Calling the extracted SpatialPointsDataframe.
+  var ExtractedSpatialPointsDataframe = ee.FeatureCollection(ExtractedPoints);
+  
+  // Defining the matching field between the two collections.
+  var JoinFilter = ee.Filter.equals({
+  leftField: 'ID',
+  rightField: 'ID'
+  });
+  
+  // Defining the join parameter.
+  var ParJoin = ee.Join.inner('primary', 'secondary');
+  
+  // Applying the parameter to concatenate the two collections.
+  var DataframeJoin = ParJoin.apply(OriginalSpatialPointsDataframe, ExtractedSpatialPointsDataframe,  JoinFilter);
+  
+  // Collapsing the ExtractedSpatialPointsDataframe into the OriginalSpatialPointsDataframe.
+  function CollapsJoin(feature){
+  return ee.Feature(feature.get('primary')).copyProperties(feature.get('secondary'));
+  }
+  
+  // Applying the collapse function.
+  var DataframeJoin = DataframeJoin.map(CollapsJoin);
+  print('Check the first row of the SpatialPointsDataframe:', DataframeJoin.first());
+  
+  // Need to set 'Point', 'Polygon', 'Line' on the basis of your vector information
+  var polygons = DataframeJoin
+    .map(function (f) { 
+      return ee.Feature(f).set('geometry_type', ee.Feature(f).geometry().type()); })
+    .filter(ee.Filter.equals('geometry_type', 'Point'));
+
+   polygons = ee.FeatureCollection(polygons);
+  
+  print('Collection:', polygons);
+  
+  // Exporting the SpatialPointsDataframe to a SHP file.
+  Export.table.toDrive({
+  collection: polygons,
+  description:'Polygons_WM_Geral_UTM_Extraction',
+  fileFormat: 'SHP'
+  });
+  
+  
