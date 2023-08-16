@@ -6,7 +6,7 @@
 
 Two GEE codes are present and developed for two public satellites, namely Sentinel-1 and Sentinel-2.
 
-The first GEE code [Data_Extraction](https://code.earthengine.google.com/e0033f21447392da736fba2ee19ac42a) allows the data extraction from water bodies polygons of spatiotemporally coincident remote sensing information.
+The first GEE code [Data_Extraction](https://code.earthengine.google.com/e0033f21447392da736fba2ee19ac42a) allows the data extraction from water bodies polygons via spatiotemporally coincident remote sensing information.
 
 The second GEE code [Export_Rasters](https://code.earthengine.google.com/e0033f21447392da736fba2ee19ac42a) allows exporting remote sening information coincident with water bodies polygons.
 
