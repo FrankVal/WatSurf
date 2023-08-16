@@ -2,7 +2,7 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-#### Here we provide the codes used to prepare remote sensing data and perform Random Forests analysis present in Valerio et al., (2023, submitted)
+#### Here we provide the codes used to prepare remote sensing data and perform Random Forests analysis present in Valerio et al., (2023, submitted).
 
 Two GEE codes are present and developed for two public satellites, namely Sentinel-1 and Sentinel-2.
 
