@@ -1,14 +1,13 @@
-# WatSurf
+# Calculating the water surface occurrence from remote sensing data
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-#### GEE_xtract is a Google Earth Engine (GEE) code for extracting remotely sensed data from ground-based data, at multiple spatial and temporal scales. Here, scale magnitude and how data is aggregated is defined by the user. Second, while GEE_xtract was primarily conceived to solve ecological scaling issues, on the other hand, it was concomitantly adapted to retain high-quality data, thus avoiding biases and anomalies during data extraction. Third, the code was further prepared for multiple secondary needs, notably to combine data from different sources, to soften computation limits throghout different strategies, and to produce advanced metrics.
+#### Here we provide the codes used to prepare remote sensing data and perform analysis present in Valerio et al., (2023, submitted)
 
-The GEE_xtract code was developed for three public satellites, namely MODIS, Landsat, and Sentinel 2.
-The funcionality of the code, for each of the satellites, can be verified directly on GEE computing platform, specifically for [MODIS](https://code.earthengine.google.com/?scriptPath=users%2Fvaleriofrank%2FGEE_xtract%3AExtract_Points_MODIS) satellites and associated products for [data-fusion](https://code.earthengine.google.com/?scriptPath=users%2Fvaleriofrank%2FGEE_xtract%3AExtract_Points_MODIS_For_Data_Fusion) approaches, as well for [Landsat](https://code.earthengine.google.com/?scriptPath=users%2Fvaleriofrank%2FGEE_xtract%3AExtract_Points_Landsat) and [Sentinel-2](https://code.earthengine.google.com/?scriptPath=users%2Fvaleriofrank%2FGEE_xtract%3AExtract_Points_Sentinel) satellites. The sample datasets used for running the command-lines are disposable as vectors at [Figshare](https://figshare.com/articles/dataset/Annual_Ground_Observations_and_Study_Area/21641564).
+Two GEE codes are present and developed for two public satellites, namely Sentinel-1 and Sentinel-2.
+The first GEE code [Data_Extraction] (https://code.earthengine.google.com/e0033f21447392da736fba2ee19ac42a) allows the data extraction from water bodies polygons of spatiotemporally coincident remote sensing information.
+The second GEE code [Export_Rasters] (https://code.earthengine.google.com/e0033f21447392da736fba2ee19ac42a) allows exporting remote sening information coincident with water bodies polygons.
 
-Two secundary directories are available:
-
-1. The first directory contains GEE codes for extracting data from ground data for each satellite. In addition, another directory is present which contains codes for extrapolate variables, hence for writing meaningful habitat metrics from each satellite. The type of metric to be extrapolated should be prepared by the user following the MSAVI2 example.
-
-2. The second directory contains a working example in R on how combine different dataset with remotely sensed extracted information, with the aim to help users that decided to split data annually.
+The two codes are also present in the GEE directory.
+In the R directory is present the R code for replicating the Random Forests classification analyses present in Valerio et al., (2023, submitted). 
+We have implemented parallelization techniques, we have effectively divided complex tasks into smaller, manageable units of work that can be executed simultaneously. Our aim was not only to boost performance and reduces execution times, but also enhance code reusability.
