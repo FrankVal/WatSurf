@@ -1,0 +1,215 @@
+# Load libraries
+library(doParallel)
+library(raster)
+library(rgdal)
+library(blockCV)
+library(randomForest)
+library(pROC)
+library(caret)
+
+# Model training -----------------------------------
+# Set working directory
+setwd("path/to/folder/")
+
+# For reproducible train datasets and random forest models
+set.seed(123)
+
+# Define auxiliar functions
+Specificity <- function (conf_matrix) {
+  TP <- conf_matrix[1,1]
+  TN <- conf_matrix[2,2]
+  FP <- conf_matrix[1,2]
+  FN <- conf_matrix[2,1]
+  spe_final <- TN / (TN + FP)
+  return(spe_final)
+}
+
+Sensitivity <- function (conf_matrix) {
+  TP <- conf_matrix[1,1]
+  TN <- conf_matrix[2,2]
+  FP <- conf_matrix[1,2]
+  FN <- conf_matrix[2,1]
+  sen_final <- TP / (TP + FN)
+  return(sen_final)
+}
+
+Matt_Coef <- function (conf_matrix) {
+  TP <- conf_matrix[1,1]
+  TN <- conf_matrix[2,2]
+  FP <- conf_matrix[1,2]
+  FN <- conf_matrix[2,1]
+  mcc_num <- (TP * TN - FP * FN)
+  mcc_den <- (TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)
+  mcc_final <- mcc_num / sqrt(mcc_den)
+  return(mcc_final)
+}
+
+Accuracy <- function (conf_matrix) {
+  TP <- conf_matrix[1,1]
+  TN <- conf_matrix[2,2]
+  FP <- conf_matrix[1,2]
+  FN <- conf_matrix[2,1]
+  Acc_final <- (TP + TN) / (TP + FP + FN + TN) 
+  return(Acc_final)
+}
+
+F1_Score <- function (conf_matrix) {
+  TP <- conf_matrix[1,1]
+  TN <- conf_matrix[2,2]
+  FP <- conf_matrix[1,2]
+  FN <- conf_matrix[2,1]
+  Precision <- TP / (TP + FP)
+  Recall <- TP / (TP + FN)
+  F1_final <- 2 * (Precision * Recall) / (Precision + Recall)
+  return(F1_final)
+}
+
+binary <- function(x) { 
+  ifelse(x > 0.51, 1, NA)
+}
+
+# Read shapefile
+WB_Binary <- rgdal::readOGR(dsn="./Polygons_MPA_Dataset_model_Extract/", 
+                            layer="Polygons_MPA_Dataset_model_Extract")
+
+
+# Select variables
+WB_Binary<- WB_Binary[,c("VV","RVI","Red_Edge_3","Red_Edge_2","BLUE","Red_Edge_1",
+                         "NDPI","GLCM_V","NVVI","SWI","GLCM_C","NDWI_N1","NDWI_N2",
+                         "GLCM_M", "NVHI","GREEN","GLCM_H","RED","VH","NDVI_N2",
+                         "MSAVI2_N2","MSAVI2_N1","VHVVR","NDII_N1","NDII_N2",
+                         "SWIR1","NIR1","NDI45", "SWIR2","NIR2","WP")]
+
+# Convert to factor
+WB_Binary$WP <- as.factor(WB_Binary$WP)
+
+# Select variables
+WB_Binary <- WB_Binary[, c("VV","NDPI","NVVI","SWI","GLCM_C","GLCM_M","VH","NDVI_N2",
+                           "VHVVR","SWIR1","BLUE","NIR1","NDI45","NDWI_N2","WP")]                  
+
+# Prepare spatial data
+sb <- blockCV::spatialBlock(speciesData = WB_Binary,
+                            species = "WP", 
+                            theRange = 3000,
+                            k = 5,
+                            selection = "systematic",
+                            iteration = 100, 
+                            biomod2Format = TRUE,
+                            progress = TRUE)
+# Create folds for models
+folds <- sb$biomodTable
+
+# Merge the folds with the original dataset 
+WB_Binary <- as.data.frame(WB_Binary)
+WB_Binary <- cbind(WB_Binary,folds)
+WB_Binary$WP.1 <- NULL
+WB_Binary$coords.x1 <- NULL
+WB_Binary$coords.x2 <- NULL
+
+# Create the test and training folds 
+train_fold_1<-WB_Binary[WB_Binary$RUN1 == 'TRUE', ] 
+test_fold_1<-WB_Binary[WB_Binary$RUN1 == 'FALSE', ] 
+
+train_fold_2<-WB_Binary[WB_Binary$RUN2 == 'TRUE', ] 
+test_fold_2<-WB_Binary[WB_Binary$RUN2 == 'FALSE', ]
+
+train_fold_3<-WB_Binary[WB_Binary$RUN3 == 'TRUE', ] 
+test_fold_3<-WB_Binary[WB_Binary$RUN3 == 'FALSE', ] 
+
+train_fold_4<-WB_Binary[WB_Binary$RUN4 == 'TRUE', ] 
+test_fold_4<-WB_Binary[WB_Binary$RUN4 == 'FALSE', ] 
+
+train_fold_5<-WB_Binary[WB_Binary$RUN5 == 'TRUE', ] 
+test_fold_5<-WB_Binary[WB_Binary$RUN5 == 'FALSE', ] 
+
+train_list<-list(train_fold_1, train_fold_2, train_fold_3,
+                 train_fold_4, train_fold_5)
+test_list<-list(test_fold_1, test_fold_2, test_fold_3,
+                test_fold_4,test_fold_5)
+
+
+# Run random forests for the 5 folds
+xname <- colnames(WB_Binary[, c("VV","NDPI","NVVI","SWI","GLCM_C","GLCM_M",
+                                "VH","NDVI_N2","VHVVR","SWIR1","BLUE","NIR1",
+                                "NDI45","NDWI_N2")])
+
+# Formula for random forest
+fmla <- as.formula(paste("WP ~ ", paste(xname, collapse = "+")))
+
+# Train and evaluate model metrics
+Train <- list()
+importance_rf <- list()
+Pred<-list()
+Spec <-list()
+Sen <- list()
+Acc <- list()
+MC <- list()
+F1 <- list()
+Auc <- list()
+ID <- c("Fold1","Fold2", "Fold3", "Fold4", "Fold5")
+
+for (i in seq(length(train_list))){
+  Train[[i]] <- randomForest::randomForest(fmla, data = train_list[[i]], 
+                                           ntree = 2000, keep.forest = TRUE, 
+                                           na.action = na.omit, importance = TRUE,
+                                           replace = FALSE, type = 'response')
+  
+  importance_rf[[i]] <- randomForest::importance(Train[[i]])
+  Pred[[i]] <- predict(Train[[i]], test_list[[i]], type = 'response')
+  ConfMatr <- caret::confusionMatrix(test_list[[i]]$WP, Pred[[i]])
+  CM  <- as.table(ConfMatr)
+  Spec[[i]] <- Specificity(CM)
+  Sen[[i]] <- Sensitivity(CM)
+  Acc[[i]] <- Accuracy(CM)
+  MC[[i]] <- Matt_Coef(CM)
+  F1[[i]] <- F1_Score(CM)
+  roc <- pROC::roc(test_list[[i]]$WP, as.numeric(Pred[[i]]))
+  Auc[[i]] <- pROC::auc(roc)
+}
+
+# Prediction with trained random forest -----------------------------------
+# List raster variables
+raster_data <- list.files("./tiff/", pattern="tif", full.names = T)
+
+rast_list <- list()
+for(i in seq(raster_data)){
+  rast_list[i] <- raster::raster(raster_data[i])
+}
+
+# Create raster stack
+stk <- raster::stack(rast_list)
+
+# Prepare cluster for parallel computing
+cl <- parallel::makePSOCKcluster(detectCores() - 1)
+doParallel::registerDoParallel(cl) 
+
+predictWP <- foreach(i = 1:5, .packages = c("randomForest", "raster")) %dopar% {
+  raster::rasterOptions(tmpdir = "./temp/") 
+  aux <- raster::predict(stk, Train[[i]], type = "prob", index = 2)
+  aux <- raster::setMinMax(aux)
+  (aux - raster::minValue(aux)) / (raster::maxValue(aux) - raster::minValue(aux))
+}
+
+# Stop cluster
+parallel::stopCluster(cl)
+
+# Stack predictions
+predictWP <- raster::stack(predictWP[[1]], predictWP[[2]], predictWP[[3]], 
+                           predictWP[[4]], predictWP[[5]]) 
+
+# Calculate mean prediction
+Pb_WP <- raster::calc(predictWP, mean, na.rm = TRUE)
+
+# Save probabilities raster
+raster::writeRaster(Pb_WP, filename = "probability_raster", 
+                    bylayer = TRUE, format = "GTiff", overwrite = TRUE)
+
+# Convert predictions to binary
+WPbin <- raster::calc(Pb_WP, fun = binary)
+
+# Save binary raster
+raster::writeRaster(WPbin, filename = "binary_raster",
+                    bylayer = TRUE, format = "GTiff", overwrite = TRUE)
+
+# Clean up temporary files
+unlink("./temp/", recursive = TRUE)
