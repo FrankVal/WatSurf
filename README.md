@@ -11,3 +11,6 @@ The second GEE code [Export_Rasters] (https://code.earthengine.google.com/e0033f
 The two codes are also present in the GEE directory.
 In the R directory is present the R code for replicating the Random Forests classification analyses present in Valerio et al., (2023, submitted). 
 We have implemented parallelization techniques, we have effectively divided complex tasks into smaller, manageable units of work that can be executed simultaneously. Our aim was not only to boost performance and reduces execution times, but also enhance code reusability.
+
+
+[MODIS](https://code.earthengine.google.com/?scriptPath=users%2Fvaleriofrank%2FGEE_xtract%3AExtract_Points_MODIS) 
