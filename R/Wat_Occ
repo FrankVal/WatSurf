@@ -187,7 +187,6 @@ predictWP <- foreach(i = 1:5, .packages = c("randomForest", "raster")) %dopar% {
   raster::rasterOptions(tmpdir = "./temp/") 
   aux <- raster::predict(stk, Train[[i]], type = "prob", index = 2)
   aux <- raster::setMinMax(aux)
-  (aux - raster::minValue(aux)) / (raster::maxValue(aux) - raster::minValue(aux))
 }
 
 # Stop cluster
