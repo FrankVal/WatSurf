@@ -1,5 +1,5 @@
 var S1 = ee.ImageCollection("COPERNICUS/S1_GRD"),
-    S2 = ee.ImageCollection("COPERNICUS/S2_SR"),
+    S2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED"),
     Area = ee.FeatureCollection("users/valeriofrank/Small_ponds/Area"), //Example
     pts = ee.FeatureCollection("users/valeriofrank/Small_ponds/Polygons_WM_Geral_UTM_Ex"); //Example
 
