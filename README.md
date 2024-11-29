@@ -19,5 +19,4 @@ As such, our aim was not only to boost performance and reduces execution times, 
 
 How to cite this work:
 
-Valerio F, Godinho S, Gonçalo F, Pita R, Gameiro J, Silva B, Marques AT, Silva JP (2024) Multi-Temporal Remote Sensing of Inland Surface Waters: A Fusion of Sentinel-1&2 Data Applied to Small Seasonal Ponds in Semiarid Envir, bioRxiv, 2024.03.03.583180; doi: https://doi.org/10.1101/2024.03.03.583180
-
+Valerio F, Godinho S, Gonçalo F, Pita R, Gameiro J, Silva B, Marques AT, Silva JP (2024) Multi-temporal remote sensing of inland surface waters: A fusion of sentinel-1&2 data applied to small seasonal ponds in semiarid environments, International Journal of Applied Earth Observation and Geoinformation, 135; doi: https://doi.org/10.1016/j.jag.2024.104283
