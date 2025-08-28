@@ -68,14 +68,16 @@ var S1 = ee.ImageCollection("COPERNICUS/S1_GRD"),
   };
   
   // Function to exclude pixels with anomalies
-  var maskNoanomalies = function(image){
-  // Identifying the quality band
-  var scl = image.select('pixel_flag');
-  // Excluding pixels that are Saturated or defective, dark area pixels, cloud shadows,
-  // clouds with low/medium and high probability, cirrus, snow and ice
-  var clear_pixels = scl.eq(2).or(scl.eq(4)).or(scl.eq(5)).or(scl.eq(6)).or(scl.eq(7)).or(scl.eq(8));
-  return image.updateMask(clear_pixels);
-  };
+// Keep only clear land and water; drop cloud/shadow/snow, etc.
+var maskNoanomalies = function(image){
+  var scl = image.select('pixel_flag'); // SCL
+  var keep = scl.eq(4)   // vegetation
+    .or(scl.eq(5))       // bare soil
+    .or(scl.eq(6))      // water
+    .or(scl.eq(2)); // optionally add .or(scl.eq(2)) if you WANT dark areas too
+  return image.updateMask(keep);
+};
+    
     
   
  //Defining the data aggregation approach for Sentinel-2
